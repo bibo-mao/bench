@@ -86,6 +86,10 @@
 #define src a0
 #define sum t6
 
+
+/*
+ * come from https://github.com/loongson/linux/commit/92a6df48ccb73dd2c3dc1799add08adf0e0b0deb
+ */
 	.text
 	.align	5
 .globl  csum_partial;     

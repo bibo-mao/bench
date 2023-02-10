@@ -20,6 +20,7 @@ static unsigned long accumulate(unsigned long sum, unsigned long data)
 
 
 /*
+ * come from linux/arch/arm64/lib/csum.c
  * We over-read the buffer and this makes KASAN unhappy. Instead, disable
  * instrumentation and call kasan explicitly.
  */
@@ -221,6 +222,9 @@ static inline unsigned short from64to16(unsigned long x)
         return out_v.us[0] + out_v.us[1];
 }
 
+/*
+ * come from linux/arch/alpha/lib/checksum.c
+ */
 int do_csum_64(const unsigned char * buff, int len)
 {
         int odd, count;
