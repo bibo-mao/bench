@@ -3,6 +3,7 @@
 
 #include <sys/time.h>
 
+extern int do_csum_interleave(char *buf, int size);
 extern int do_csum_128(char *buf, int size);
 extern int do_csum_32(char *buf, int size);
 extern int do_csum_64(char *buf, int size);
@@ -55,6 +56,11 @@ unsigned short ip_compute_csum( void *buf, int len)
         return csum_fold(csum_partial(buf, len, 0));
 }
 
+unsigned short ip_compute_csum_interleave( void *buf, int len)
+{
+        return (unsigned short)~do_csum_interleave(buf, len);
+}
+
 void bench(char *buf, int size)
 {
 	struct timeval tv1, tv2;
@@ -78,11 +84,11 @@ void bench(char *buf, int size)
 
 	gettimeofday(&tv1, NULL);
 	for (i=0; i<loops; i++) {
-		ip_compute_csum_64(buf, size);
+		ip_compute_csum_interleave(buf, size);
 	}
 	gettimeofday(&tv2, NULL);
 	elapse3 = (((tv2.tv_usec-tv1.tv_usec)+((tv2.tv_sec-tv1.tv_sec)*1000000)));
-	printf("buf size[%4d] loops[0x%x] times[us]: csum uint128 %ld asm method %ld uint64 %ld \n", size, loops, elapse1, elapse2, elapse3);
+	printf("buf size[%4d] loops[0x%x] times[us]: csum uint128 %ld asm method %ld interleave %ld \n", size, loops, elapse1, elapse2, elapse3);
 }
 
 void checkFunction(char *buf, int size)
@@ -94,7 +100,7 @@ void checkFunction(char *buf, int size)
         len = 400 + i * 8;
         val1 = ip_compute_csum_128(buf +i, len);
         val2 = ip_compute_csum(buf + i, len);
-        val3 = ip_compute_csum_64(buf+i, len);
+        val3 = ip_compute_csum_interleave(buf+i, len);
         if ((val1 != val2) || (val2 != val3))
            printf("val1 %x val2 %x val3 %x\n", val1, val2, val3);
    }

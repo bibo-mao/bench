@@ -19,6 +19,155 @@ static unsigned long accumulate(unsigned long sum, unsigned long data)
 	return sum;
 }
 
+unsigned int do_csum_interleave(const unsigned char *buff, int len)
+{
+       unsigned int offset, shift, sum;
+        const unsigned long *ptr;
+        unsigned long sum64;
+        unsigned long tmp0, tmp1, tmp2, tmp3, tmp4;
+
+        if (len == 0)
+                return 0;
+
+        offset = (unsigned long)buff & 7;
+        /*
+         * This is to all intents and purposes safe, since rounding down cannot
+         * result in a different page or cache line being accessed, and @buff
+         * should absolutely not be pointing to anything read-sensitive. We do,
+         * however, have to be careful not to piss off KASAN, which means using
+         * unchecked reads to accommodate the head and tail, for which we'll
+         * compensate with an explicit check up-front.
+         */
+        ptr = (unsigned long *)(buff - offset);
+        len = len + offset - 8;
+
+        /*
+         * Head: zero out any excess leading bytes. Shifting back by the same
+         * amount should be at least as fast as any other way of handling the
+         * odd/even alignment, and means we can ignore it until the very end.
+         */
+        shift = offset * 8;
+        sum64 = *ptr++;
+        sum64 = (sum64 >> shift) << shift;
+
+        if (len > 32) {
+                tmp0 = *(unsigned long *)ptr;
+                tmp1 = *(unsigned long *)(ptr + 1);
+                tmp2 = *(unsigned long *)(ptr + 2);
+                tmp3 = *(unsigned long *)(ptr + 3);
+                sum64 += tmp0;
+                tmp1  += tmp2;
+                ptr   += 4;
+                len   -= 32;
+                if (sum64 < tmp0)
+                        sum64 += 1;
+
+                while (len >= 48) {
+                        len -= 48;
+		 	__asm__ __volatile__("": :"r"(ptr),"r"(len));
+                        tmp4 = *(unsigned long *)ptr;
+                        if (tmp1 < tmp2)
+                                tmp1 += 1;
+                        tmp3 += tmp4;
+
+                        tmp0 = *(unsigned long *)(ptr + 1);
+                        if (tmp3 < tmp4)
+                                tmp3 += 1;
+                        sum64 += tmp0;
+
+                        tmp2 = *(unsigned long *)(ptr + 2);
+                        if (sum64 < tmp0)
+                                sum64 += 1;
+                        tmp1 += tmp2;
+
+                        tmp4 = *(unsigned long *)(ptr + 3);
+                        if (tmp1 < tmp2)
+                                tmp1 +=1 ;
+                        tmp3 += tmp4;
+
+                        tmp0 = *(unsigned long *)(ptr + 4);
+                        if (tmp3 < tmp4)
+                                tmp3 +=1;
+                        sum64 += tmp0;
+
+                        tmp2 = *(unsigned long *)(ptr + 5);
+                        if (sum64 < tmp0)
+                                sum64 += 1;
+                        tmp1 += tmp2;
+                        ptr += 6;
+                }
+        } else
+                tmp1 = tmp2 = tmp3 = 0;
+
+        if (len >= 24) {
+                len -=24;
+		 __asm__ __volatile__("": :"r"(ptr),"r"(len));
+                tmp4 = *(unsigned long *)ptr;
+                if (tmp1 < tmp2)
+                        tmp1 += 1;
+                tmp3 += tmp4;
+
+                tmp0 = *(unsigned long *)(ptr + 1);
+                if (tmp3 < tmp4)
+                        tmp3 += 1;
+                sum64 += tmp0;
+
+                tmp2 = *(unsigned long *)(ptr + 2);
+                if (sum64 < tmp0)
+                        sum64 += 1;
+                tmp1 += tmp2;
+                ptr +=3;
+        }
+
+        if (len > 16) {
+                tmp4 = *(unsigned long *)ptr;
+                if (tmp1 < tmp2)
+                        tmp1 += 1;
+                tmp3 += tmp4;
+
+                tmp0 = *(unsigned long *)(ptr + 1);
+                if (tmp3 < tmp4)
+                        tmp3 += 1;
+                sum64 += tmp0;
+
+                tmp2 = *(unsigned long *)(ptr + 2);
+                shift = (24 - len) << 3;
+                tmp2 = (tmp2 << shift) >> shift;
+                if (sum64 < tmp0)
+                        sum64 += 1;
+                tmp1 += tmp2;
+                len -= 24;
+                ptr += 3;
+        }
+
+        if (tmp1 < tmp2)
+                tmp1 += 1;
+        tmp1  = accumulate(tmp1, tmp3);
+        sum64 = accumulate(sum64, tmp1);
+        if (len >= 8) {
+                len -= 8;
+                tmp0 = *(unsigned long *)ptr;
+                sum64 = accumulate(sum64, tmp0);
+                ptr += 1;
+        }
+
+        if (len > 0) {
+                tmp0 = *(unsigned long *)ptr;
+                shift = (8 -len) << 3;
+                tmp0 = (tmp0 << shift) >> shift;
+                sum64 = accumulate(sum64, tmp0);
+        }
+
+        /* Finally, folding */
+        sum64 += (sum64 >> 32) | (sum64 << 32);
+        sum = sum64 >> 32;
+        sum += (sum >> 16) | (sum << 16);
+        if (offset & 1)
+                return (unsigned short)swab32(sum);
+
+        return sum >> 16;
+}
+
 /*
  * come from linux/arch/arm64/lib/csum.c
  * We over-read the buffer and this makes KASAN unhappy. Instead, disable
