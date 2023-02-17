@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-
 #include <sys/time.h>
 
 #define ___constant_swab32(x) ((unsigned int)(                         \
@@ -14,10 +13,11 @@
 /* Looks dumb, but generates nice-ish code */
 static unsigned long accumulate(unsigned long sum, unsigned long data)
 {
-        __uint128_t tmp = (__uint128_t)sum + data;
-        return tmp + (tmp >> 64);
+	sum += data;
+	if (sum < data)
+		sum += 1;
+	return sum;
 }
-
 
 /*
  * come from linux/arch/arm64/lib/csum.c
@@ -74,6 +74,7 @@ unsigned int do_csum_128(const unsigned char *buff, int len)
 
                 len -= 64;
                 ptr += 8;
+		 __asm__ __volatile__("": :"r"(ptr),"r"(len));
 
                 /* This is the "don't dump the carry flag into a GPR" idiom */
                 tmp1 += (tmp1 >> 64) | (tmp1 << 64);
@@ -98,6 +99,7 @@ unsigned int do_csum_128(const unsigned char *buff, int len)
 
                 len -= 16;
                 ptr += 2;
+		__asm__ __volatile__("": :"r"(ptr),"r"(len));
 
 #ifdef __LITTLE_ENDIAN
                 data = tmp >> 64;

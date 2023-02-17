@@ -85,11 +85,26 @@ void bench(char *buf, int size)
 	printf("buf size[%4d] loops[0x%x] times[us]: csum uint128 %ld asm method %ld uint64 %ld \n", size, loops, elapse1, elapse2, elapse3);
 }
 
+void checkFunction(char *buf, int size)
+{
+    int i, len;
+    int val1, val2, val3;
+
+    for (i=0; i<16; i++) {
+        len = 400 + i * 8;
+        val1 = ip_compute_csum_128(buf +i, len);
+        val2 = ip_compute_csum(buf + i, len);
+        val3 = ip_compute_csum_64(buf+i, len);
+        if ((val1 != val2) || (val2 != val3))
+           printf("val1 %x val2 %x val3 %x\n", val1, val2, val3);
+   }
+}
+
 
 void main(){
    char *buf;
    static struct timeval tv1, tv2;
-   int i, size, loops, val1, val2, val3;
+   int i, size;
 
    size = 4096;
    buf = malloc(size);
@@ -97,13 +112,9 @@ void main(){
 	   buf[i] = (char)~i;
    }
 
-   val1 = ip_compute_csum_128(buf, size);
-   val2 = ip_compute_csum(buf, size);
-   val3 = ip_compute_csum_64(buf, size);
-
-   printf("val1 %x val2 %x val3 %x\n", val1, val2, val3);
-
    gettimeofday(&tv1, 0);
+   checkFunction(buf, size);
+
    bench(buf, size);
    bench(buf, 1472);
    bench(buf, 250);
